@@ -13,9 +13,31 @@ patients drove the result.
 | File | Purpose |
 |---|---|
 | `app.py` | The Streamlit application |
+| `train.py` | Reproducible training script |
+| `heart.csv` | Source dataset (918 patients) |
 | `knn_heart_model.pkl` | Fitted `KNeighborsClassifier` |
 | `scaler.pkl` | Fitted `StandardScaler` |
 | `heart_columns.pkl` | Expected feature column order |
+| `training_report.json` | Metrics and settings from the last training run |
+
+## Model performance
+
+The bundled model is trained by `train.py` and scores **86.4%** on a held-out
+test split (184 patients never seen during training):
+
+```
+              precision    recall  f1-score   support
+           0       0.83      0.88      0.85        82
+           1       0.90      0.85      0.87       102
+    accuracy                           0.86       184
+```
+
+`k=7` was chosen by 5-fold cross-validation on the training split rather than
+assumed. Median confidence across the dataset is 71%.
+
+## Screenshot
+
+![The app after pressing Predict](docs/screenshot.png)
 
 ## Running it
 
@@ -25,6 +47,17 @@ streamlit run app.py
 ```
 
 The app opens at <http://localhost:8501>.
+
+## Retraining
+
+```bash
+python train.py                # writes *_fixed.pkl alongside the originals
+python train.py --compare      # also explain the original artifacts' bug
+python train.py --promote      # overwrite the artifacts the app loads
+```
+
+`--promote` is what produced the artifacts currently in the repo, so the
+committed model is reproducible from `heart.csv` alone.
 
 ## How the model works
 
@@ -73,48 +106,41 @@ zero readings with the column mean, so the model has never seen a literal `0`
 for either field. Entering one would land far off-manifold. If a reading is
 genuinely unknown, leave the default.
 
-## Known issues
+## What was wrong with the original model
 
-**The bundled model has a data-leakage bug. Do not trust its accuracy.**
-
-Reading directly from the artifacts:
+The artifacts this repo first shipped contained a data-leakage bug. The
+evidence, read directly from them:
 
 - `scaler.n_samples_seen_` = **184**
 - `model.n_samples_fit_` = **734**
 - 184 + 734 = 918 = the full dataset
 
 The scaler was fitted on the **test** split while the model was fitted on the
-**train** split. Any accuracy figure derived from this pipeline is optimistic
-and meaningless.
+**train** split, so no honest accuracy figure existed for that pipeline.
 
-A second issue compounds it: `scaler.scale_[Age]` is `1.109`, but raw `Age` has
-a standard deviation of `9.43`. The scaler was never fitted on raw values,
-which means applying `scaler.transform()` to a raw patient produces wildly
-inflated values (a raw `Age` of 50 maps to z ≈ 45, and the nearest training
-patient sits at a distance of ~237).
+Compounding it, `scaler.scale_[Age]` was `1.109` while raw `Age` has a standard
+deviation of `9.43`. The scaler had never seen raw values, so applying it to a
+raw patient produced absurd distances — a raw `Age` of 50 mapped to z ≈ 45,
+putting the nearest training patient roughly 237 units away.
 
-Corrected pipeline:
+The original training code was never saved, so those artifacts could not be
+regenerated or audited. That is what `train.py` now fixes.
 
-```python
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
-scaler = StandardScaler().fit(X_train)   # fit on TRAIN only
-model.fit(scaler.transform(X_train), y_train)   # model sees TRAIN
-```
+## What `train.py` corrects
 
-Additional preprocessing concerns worth fixing at the same time:
+1. **Scaler fitted on the train split only.** The single change that makes the
+   reported accuracy trustworthy.
+2. **Only the five numeric columns are standardised.** The original scaled every
+   binary dummy too. For KNN this matters more than usual, because Euclidean
+   distance decides which patients count as neighbours — scaling dummies
+   silently reweights the features. They now stay as 0/1.
+3. **Median imputation instead of mean.** `Cholesterol == 0` (172 rows, 18.7%)
+   means "not recorded". Substituting the mean of `244.64` conflated "not
+   measured" with "genuinely 244"; the median is used instead.
+4. **Stratified split and a fixed `random_state`.** The original split seed was
+   unknown, so the original model cannot be reproduced exactly even in principle.
 
-- Binary features were standardised, including every dummy. Since KNN relies on
-  Euclidean distance, feature scale directly changes which patients are grouped.
-  Standardising only the five numeric columns and leaving dummies as 0/1 is the
-  conventional fix.
-- `Cholesterol == 0` (172 rows, 18.7%) was treated as missing and replaced with
-  the column mean of `244.64`, conflating "not measured" with "actually 244".
-  A median or an explicit missing-value indicator is more honest.
-
-Until this is resolved, treat the app as a UI demonstration rather than a
-working classifier.
+Run `python train.py --compare` to print this analysis against the old artifacts.
 
 ## Data
 

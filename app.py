@@ -13,6 +13,9 @@ expected_columns = joblib.load(BASE_DIR / "heart_columns.pkl")
 
 fit_y = getattr(model, "_y", None)
 
+#The only columns the retrained scaler standardises; binaries stay 0/1.
+SCALED_COLUMNS = ["Age", "RestingBP", "Cholesterol", "MaxHR", "Oldpeak"]
+
 st.title("Heart Disease Check")
 st.write("Fill in the patient's details, then press Predict.")
 
@@ -112,7 +115,15 @@ for column, (chosen, allowed) in DROPDOWN_FLAGS.items():
         st.error(f"Internal error: '{chosen}' is not a valid option for {column}.")
         st.stop()
 
-scaled = scaler.transform(input_df[expected_columns])
+#Two artifact styles are supported:
+#  - the legacy scaler was fitted on all 15 columns, so transform the whole frame
+#  - the retrained scaler covers only the 5 numeric columns, so scale those and
+#    leave the binary columns as 0/1
+if scaler.n_features_in_ == len(expected_columns):
+    scaled = scaler.transform(input_df[expected_columns])
+else:
+    scaled = input_df.copy()
+    scaled[SCALED_COLUMNS] = scaler.transform(input_df[SCALED_COLUMNS])
 
 #Honour the k choice without mutating the unpickled model
 active_model = model if n_neighbors == model.n_neighbors else model.set_params(n_neighbors=n_neighbors)
@@ -152,8 +163,14 @@ if st.session_state.get("predicted"):
                 mark = "same answer" if ((label == "Heart disease") == bool(prediction)) else "different answer"
                 st.write(f"{rank}. {label} - {mark}")
 
-st.warning(
-    "This saved model was trained with the scaler fitted on the test split, so its "
-    "accuracy is overstated. Retrain before relying on it."
-)
+if scaler.n_features_in_ == len(expected_columns):
+    #Legacy artifacts: the scaler covered all 15 columns because it had been fitted
+    #on already-scaled data, and it was fitted on the test split.
+    st.warning(
+        "This model was trained with the scaler fitted on the test split, so its "
+        "accuracy is overstated. Run `python train.py --promote` to replace it with a "
+        "correctly trained model."
+    )
+else:
+    st.caption(f"Model trained on {model.n_samples_fit_} patients, k={model.n_neighbors}.")
 st.caption("Educational demo only - not medical advice.")
