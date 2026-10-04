@@ -46,13 +46,15 @@ with right:
     resting_bp = st.number_input(
         "Resting blood pressure", min_value=1, max_value=300, value=120, step=1, key="resting_bp"
     )
-    cholesterol = st.number_input("Cholesterol", min_value=1, max_value=600, value=200, step=1, key="cholesterol")
+    cholesterol = st.number_input("Cholesterol", min_value=1, max_value=610, value=200, step=1, key="cholesterol")
     fasting_bs = st.selectbox("Blood sugar above 120", ["No", "Yes"], key="fasting_bs")
     resting_ecg = st.selectbox(
         "Resting ECG", ["Normal", "Abnormal", "Left ventricular hypertrophy"], key="resting_ecg"
     )
     max_hr = st.number_input("Max heart rate", min_value=0, max_value=250, value=150, step=1, key="max_hr")
-    oldpeak = st.number_input("ST depression", min_value=0.0, max_value=10.0, value=1.0, step=0.1, key="oldpeak")
+    # Oldpeak can legitimately be negative in the source data (down to -2.6), so the
+    # lower bound must allow it rather than clamping a real reading to zero.
+    oldpeak = st.number_input("ST depression", min_value=-3.0, max_value=7.0, value=1.0, step=0.1, key="oldpeak")
 
 #Map the raw inputs onto the 15 columns the model was trained on
 CHEST_PAIN_MAP = {

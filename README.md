@@ -54,6 +54,25 @@ The app encodes these deliberately. It also validates every dropdown against
 its column mapping at runtime and blocks the prediction on mismatch, because a
 mismatched flag would otherwise change the result silently.
 
+### Input ranges
+
+The numeric bounds in the UI match the source dataset. Note that `Oldpeak` may
+be **negative** — a real finding meaning ST elevation rather than depression —
+and the input allows it:
+
+| Field | Dataset range | Accepted in app |
+|---|---|---|
+| `Age` | 28 – 77 | 1 – 120 |
+| `RestingBP` | 0 – 200 | 1 – 300 |
+| `Cholesterol` | 0 – 603 | 1 – 610 |
+| `MaxHR` | 60 – 202 | 0 – 250 |
+| `Oldpeak` | **-2.6** – 6.2 | -3.0 – 7.0 |
+
+`RestingBP` and `Cholesterol` start at 1 rather than 0 because training replaced
+zero readings with the column mean, so the model has never seen a literal `0`
+for either field. Entering one would land far off-manifold. If a reading is
+genuinely unknown, leave the default.
+
 ## Known issues
 
 **The bundled model has a data-leakage bug. Do not trust its accuracy.**
@@ -69,7 +88,7 @@ The scaler was fitted on the **test** split while the model was fitted on the
 and meaningless.
 
 A second issue compounds it: `scaler.scale_[Age]` is `1.109`, but raw `Age` has
-a standard deviation near `9.3`. The scaler was never fitted on raw values,
+a standard deviation of `9.43`. The scaler was never fitted on raw values,
 which means applying `scaler.transform()` to a raw patient produces wildly
 inflated values (a raw `Age` of 50 maps to z ≈ 45, and the nearest training
 patient sits at a distance of ~237).
