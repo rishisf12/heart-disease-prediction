@@ -1,0 +1,24 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Environments
+.venv/
+venv/
+env/
+
+# Testing / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Agent / browser-automation artifacts
+.playwright-mcp/
+
+# Streamlit
+.streamlit/secrets.toml
